@@ -27,6 +27,8 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "*",
+    "@opencode-ai/sdk": "*",
+    "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
   },
   "scripts": {

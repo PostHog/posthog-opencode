@@ -16,9 +16,7 @@
         }
     },
     "files": [
-        "dist",
-        "src",
-        "!src/**/*.test.ts"
+        "dist"
     ],
     "keywords": [
         "opencode-plugin",

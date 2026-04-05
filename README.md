@@ -8,7 +8,7 @@ Add to your `opencode.json`:
 
 ```json
 {
-  "plugin": ["opencode-posthog"]
+    "plugin": ["opencode-posthog"]
 }
 ```
 
@@ -18,16 +18,16 @@ For local development, clone or symlink this repo into `.opencode/plugins/` and 
 
 All configuration is via environment variables:
 
-| Variable | Default | Description |
-|---|---|---|
-| `POSTHOG_API_KEY` | _(required)_ | PostHog project API key |
-| `POSTHOG_HOST` | `https://us.i.posthog.com` | PostHog instance URL |
-| `POSTHOG_PRIVACY_MODE` | `false` | Redact all LLM input/output content when `true` |
-| `POSTHOG_ENABLED` | `true` | Set `false` to disable |
-| `POSTHOG_DISTINCT_ID` | machine hostname | The `distinct_id` for all events |
-| `POSTHOG_PROJECT_NAME` | cwd basename | Project name in all events |
-| `POSTHOG_TAGS` | _(none)_ | Custom tags: `key1:val1,key2:val2` |
-| `POSTHOG_MAX_ATTRIBUTE_LENGTH` | `12000` | Max length for serialized tool input/output |
+| Variable                       | Default                    | Description                                     |
+| ------------------------------ | -------------------------- | ----------------------------------------------- |
+| `POSTHOG_API_KEY`              | _(required)_               | PostHog project API key                         |
+| `POSTHOG_HOST`                 | `https://us.i.posthog.com` | PostHog instance URL                            |
+| `POSTHOG_PRIVACY_MODE`         | `false`                    | Redact all LLM input/output content when `true` |
+| `POSTHOG_ENABLED`              | `true`                     | Set `false` to disable                          |
+| `POSTHOG_DISTINCT_ID`          | machine hostname           | The `distinct_id` for all events                |
+| `POSTHOG_PROJECT_NAME`         | cwd basename               | Project name in all events                      |
+| `POSTHOG_TAGS`                 | _(none)_                   | Custom tags: `key1:val1,key2:val2`              |
+| `POSTHOG_MAX_ATTRIBUTE_LENGTH` | `12000`                    | Max length for serialized tool input/output     |
 
 If `POSTHOG_API_KEY` is not set, the plugin is a no-op.
 

@@ -1,0 +1,35 @@
+{
+  "name": "opencode-posthog",
+  "version": "0.1.0",
+  "description": "PostHog LLM Analytics plugin for OpenCode",
+  "type": "module",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "keywords": [
+    "opencode-plugin",
+    "posthog",
+    "ai",
+    "llm",
+    "observability",
+    "tracing",
+    "analytics"
+  ],
+  "packageManager": "pnpm@10.12.1",
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "dependencies": {
+    "posthog-node": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "*",
+    "typescript": "^5.8.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

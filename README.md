@@ -4,15 +4,28 @@ PostHog LLM Analytics plugin for [OpenCode](https://opencode.ai). Captures LLM g
 
 ## Installation
 
-Add to your `opencode.json`:
+Add `opencode-posthog` to your `opencode.json`:
 
 ```json
 {
+    "$schema": "https://opencode.ai/config.json",
     "plugin": ["opencode-posthog"]
 }
 ```
 
-For local development, clone or symlink this repo into `.opencode/plugins/` and ensure `posthog-node` is installed (add it to `.opencode/package.json`).
+The package is installed automatically at startup and cached in `~/.cache/opencode/node_modules/`.
+
+### Local development
+
+Place the plugin source in your project's `.opencode/plugins/` directory (or `~/.config/opencode/plugins/` for global use). Add `posthog-node` to `.opencode/package.json` so OpenCode installs it at startup:
+
+```json
+{
+    "dependencies": {
+        "posthog-node": "^5.0.0"
+    }
+}
+```
 
 ## Configuration
 

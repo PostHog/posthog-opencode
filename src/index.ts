@@ -2,6 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import type {
   Event,
   AssistantMessage,
+  StepStartPart,
   StepFinishPart,
   ToolPart,
   TextPart,
@@ -120,6 +121,9 @@ export const PostHogPlugin: Plugin = async () => {
       case "text":
         handleTextPart(part)
         break
+      case "step-start":
+        handleStepStart(part)
+        break
       case "step-finish":
         await handleStepFinish(part)
         break
@@ -141,6 +145,14 @@ export const PostHogPlugin: Plugin = async () => {
     } else if (role === "assistant") {
       trace.lastAssistantText = part.text
     }
+  }
+
+  function handleStepStart(part: StepStartPart) {
+    const trace = traces.get(part.sessionID)
+    if (!trace) return
+    // Allocate the generation span ID eagerly so that tool spans
+    // emitted during this step can reference it as their parent.
+    trace.currentGenerationSpanId = randomUUID()
   }
 
   async function handleStepFinish(part: StepFinishPart) {

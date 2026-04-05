@@ -44,6 +44,21 @@ export function loadConfig(): PluginConfig {
 const SENSITIVE_KEY_PATTERN =
   /api[-_]?key|token|secret|password|authorization|credential|private[-_]?key/i
 
+/**
+ * Pattern to detect sensitive values embedded in strings, e.g. JSON
+ * fragments like `"api_key":"sk-..."` or `password=secret` in command output.
+ */
+const SENSITIVE_VALUE_PATTERN =
+  /(?:"(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)"\s*:\s*"[^"]*"|(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)\s*[=:]\s*\S+)/gi
+
+/**
+ * Redact sensitive values found inline in a string. Handles both JSON-like
+ * `"key":"value"` patterns and `key=value` / `key: value` patterns.
+ */
+function redactStringValues(str: string): string {
+  return str.replace(SENSITIVE_VALUE_PATTERN, "[REDACTED]")
+}
+
 function redactSensitive(
   value: unknown,
   seen: WeakSet<object>,
@@ -51,6 +66,7 @@ function redactSensitive(
 ): unknown {
   if (depth > 8) return "[DepthLimit]"
   if (value === null || value === undefined) return value
+  if (typeof value === "string") return redactStringValues(value)
   if (typeof value !== "object") return value
   if (seen.has(value)) return "[Circular]"
   seen.add(value)

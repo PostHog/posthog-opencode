@@ -28,8 +28,9 @@ export function buildAiGeneration(
   trace: TraceState,
   config: PluginConfig,
 ): CaptureEvent {
-  const spanId = randomUUID()
-  trace.currentGenerationSpanId = spanId
+  // Use the span ID allocated at step-start so tool spans emitted
+  // during this step already reference the correct parent.
+  const spanId = trace.currentGenerationSpanId ?? randomUUID()
 
   const inputMessages = redactForPrivacy(
     trace.userPrompt ? [{ role: "user", content: trace.userPrompt }] : null,

@@ -199,13 +199,7 @@ export const PostHogPlugin: Plugin = async () => {
       // ignore flush errors
     }
 
-    // Clean up state for this trace cycle
     traces.delete(sessionId)
-    // Clean up message roles for this session
-    for (const [msgId, _] of messageRoles) {
-      // We can't efficiently filter by session, so we leave them
-      // They'll be overwritten on next use and are lightweight
-    }
   }
 
   async function handleSessionError(event: Event) {

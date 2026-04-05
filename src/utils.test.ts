@@ -64,6 +64,22 @@ describe("serializeAttribute", () => {
     expect(result).toContain("[REDACTED]")
   })
 
+  it("redacts multi-word bearer token values", () => {
+    const header = "Authorization: Bearer secret-token"
+    const result = serializeAttribute(header, 10000)
+    expect(result).not.toContain("secret-token")
+    expect(result).not.toContain("Bearer")
+    expect(result).toContain("[REDACTED]")
+  })
+
+  it("redacts header-style secrets with colons in tool output", () => {
+    const output = "HTTP/1.1 200 OK\nAuthorization: Bearer sk-abc123\nContent-Type: text/plain"
+    const result = serializeAttribute(output, 10000)
+    expect(result).not.toContain("sk-abc123")
+    expect(result).toContain("[REDACTED]")
+    expect(result).toContain("Content-Type")
+  })
+
   it("truncates long output", () => {
     const longStr = "a".repeat(200)
     const result = serializeAttribute(longStr, 50)
@@ -106,10 +122,19 @@ describe("serializeError", () => {
     expect(serializeError(undefined)).toBeNull()
   })
 
-  it("falls back to error name on serialization failure", () => {
+  it("handles circular references via redaction", () => {
     const circular: Record<string, unknown> = { name: "BadError" }
     circular.self = circular
     const result = serializeError(circular as { name: string; data?: Record<string, unknown> })
-    expect(result).toBe("BadError")
+    expect(result).toContain("BadError")
+    expect(result).toContain("[Circular]")
+  })
+
+  it("redacts sensitive keys in error data", () => {
+    const error = { name: "AuthError", data: { api_key: "sk-secret-123", message: "failed" } }
+    const result = serializeError(error)
+    expect(result).not.toContain("sk-secret-123")
+    expect(result).toContain("[REDACTED]")
+    expect(result).toContain("failed")
   })
 })

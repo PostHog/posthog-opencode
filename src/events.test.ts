@@ -55,6 +55,8 @@ function makeTrace(overrides?: Partial<TraceState>): TraceState {
     currentGenerationSpanId: "gen-span-1",
     userPrompt: "Hello",
     lastAssistantText: "Hi there!",
+    stepInputMessages: [{ role: "user", content: "Hello" }],
+    stepAssistantText: "Hi there!",
     ...overrides,
   }
 }
@@ -127,14 +129,34 @@ describe("buildAiGeneration", () => {
     expect(typeof result.properties.$ai_span_id).toBe("string")
   })
 
-  it("includes input and output content", () => {
+  it("includes input and output content from step messages", () => {
     const trace = makeTrace({
       userPrompt: "What is 2+2?",
+      stepInputMessages: [{ role: "user", content: "What is 2+2?" }],
+      stepAssistantText: "4",
       lastAssistantText: "4",
     })
     const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
     expect(result.properties.$ai_input).toEqual([{ role: "user", content: "What is 2+2?" }])
     expect(result.properties.$ai_output_choices).toEqual([{ role: "assistant", content: "4" }])
+  })
+
+  it("includes tool results in input for multi-step generations", () => {
+    const trace = makeTrace({
+      stepInputMessages: [
+        { role: "user", content: "Read the file" },
+        { role: "tool", content: "[read] file contents here" },
+      ],
+      stepAssistantText: "I read the file.",
+    })
+    const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
+    expect(result.properties.$ai_input).toEqual([
+      { role: "user", content: "Read the file" },
+      { role: "tool", content: "[read] file contents here" },
+    ])
+    expect(result.properties.$ai_output_choices).toEqual([
+      { role: "assistant", content: "I read the file." },
+    ])
   })
 
   it("redacts content in privacy mode", () => {

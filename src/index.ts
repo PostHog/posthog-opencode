@@ -10,7 +10,7 @@ import type {
   ToolStateError,
 } from "@opencode-ai/sdk"
 import { randomUUID } from "node:crypto"
-import { loadConfig } from "./utils.js"
+import { loadConfig, serializeAttribute } from "./utils.js"
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from "./events.js"
 import type { AssistantInfo, TraceState } from "./types.js"
 import type { CaptureEvent } from "./events.js"
@@ -67,6 +67,7 @@ export const PostHogPlugin: Plugin = async () => {
         totalOutputTokens: 0,
         totalCost: 0,
         hadError: false,
+        stepInputMessages: [],
       }
       traces.set(sessionId, trace)
     }
@@ -88,6 +89,7 @@ export const PostHogPlugin: Plugin = async () => {
         totalCost: 0,
         hadError: false,
         agentName: msg.agent,
+        stepInputMessages: [],
       }
       traces.set(msg.sessionID, trace)
       messageRoles.set(msg.id, "user")
@@ -108,7 +110,7 @@ export const PostHogPlugin: Plugin = async () => {
       trace.currentAssistantMsg = info
       if (assistant.error) {
         trace.hadError = true
-        trace.lastError = JSON.stringify(assistant.error)
+        trace.lastError = serializeAttribute(assistant.error, config.maxAttributeLength) ?? assistant.error.name
       }
     }
   }
@@ -142,8 +144,10 @@ export const PostHogPlugin: Plugin = async () => {
 
     if (role === "user") {
       trace.userPrompt = part.text
+      trace.stepInputMessages.push({ role: "user", content: part.text })
     } else if (role === "assistant") {
       trace.lastAssistantText = part.text
+      trace.stepAssistantText = part.text
     }
   }
 
@@ -153,6 +157,8 @@ export const PostHogPlugin: Plugin = async () => {
     // Allocate the generation span ID eagerly so that tool spans
     // emitted during this step can reference it as their parent.
     trace.currentGenerationSpanId = randomUUID()
+    // Reset per-step assistant text for the new generation
+    trace.stepAssistantText = undefined
   }
 
   async function handleStepFinish(part: StepFinishPart) {
@@ -186,9 +192,20 @@ export const PostHogPlugin: Plugin = async () => {
     const span = buildAiSpan(part.tool, toolState, trace, config)
     safeCapture(phClient, span)
 
-    if (part.state.status === "error") {
+    // Feed tool result into step input so subsequent generations include
+    // the tool context the model actually saw.
+    if (toolState.status === "completed") {
+      trace.stepInputMessages.push({
+        role: "tool",
+        content: `[${part.tool}] ${toolState.output}`,
+      })
+    } else {
+      trace.stepInputMessages.push({
+        role: "tool",
+        content: `[${part.tool}] ERROR: ${toolState.error}`,
+      })
       trace.hadError = true
-      trace.lastError = (part.state as ToolStateError).error
+      trace.lastError = toolState.error
     }
   }
 
@@ -224,7 +241,7 @@ export const PostHogPlugin: Plugin = async () => {
     if (trace) {
       trace.hadError = true
       if (event.properties.error) {
-        trace.lastError = JSON.stringify(event.properties.error)
+        trace.lastError = serializeAttribute(event.properties.error, config.maxAttributeLength) ?? "unknown error"
       }
     }
   }

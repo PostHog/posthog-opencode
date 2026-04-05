@@ -9,6 +9,11 @@ export interface PluginConfig {
   maxAttributeLength: number
 }
 
+export interface InputMessage {
+  role: string
+  content: string
+}
+
 export interface TraceState {
   traceId: string
   sessionId: string
@@ -20,6 +25,10 @@ export interface TraceState {
   lastError?: string
   userPrompt?: string
   lastAssistantText?: string
+  /** Accumulated input context for the current step (user prompt + tool results). */
+  stepInputMessages: InputMessage[]
+  /** Assistant text accumulated during the current step, reset on each step-start. */
+  stepAssistantText?: string
   currentAssistantMsg?: AssistantInfo
   currentGenerationSpanId?: string
   agentName?: string

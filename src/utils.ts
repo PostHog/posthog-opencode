@@ -45,18 +45,30 @@ const SENSITIVE_KEY_PATTERN =
   /api[-_]?key|token|secret|password|authorization|credential|private[-_]?key/i
 
 /**
- * Pattern to detect sensitive values embedded in strings, e.g. JSON
- * fragments like `"api_key":"sk-..."` or `password=secret` in command output.
+ * Patterns to detect sensitive values embedded in strings.
+ *
+ * JSON-style: `"api_key": "sk-secret-123"` or `"token":"abc"`
+ * Matches the full `"key":"value"` including the quoted value.
  */
-const SENSITIVE_VALUE_PATTERN =
-  /(?:"(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)"\s*:\s*"[^"]*"|(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)\s*[=:]\s*\S+)/gi
+const SENSITIVE_JSON_PATTERN =
+  /"(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)"\s*:\s*"[^"]*"/gi
+
+/**
+ * Header/env-style: `Authorization: Bearer secret-token` or `password=hunter2`
+ * Matches the key and everything to the next comma, semicolon, newline, or
+ * end-of-string so multi-word values like `Bearer xyz` are fully consumed.
+ */
+const SENSITIVE_KV_PATTERN =
+  /(?:api[-_]?key|token|secret|password|authorization|credential|private[-_]?key)\s*[=:]\s*[^\n,;]*/gi
 
 /**
  * Redact sensitive values found inline in a string. Handles both JSON-like
  * `"key":"value"` patterns and `key=value` / `key: value` patterns.
  */
 function redactStringValues(str: string): string {
-  return str.replace(SENSITIVE_VALUE_PATTERN, "[REDACTED]")
+  return str
+    .replace(SENSITIVE_JSON_PATTERN, "[REDACTED]")
+    .replace(SENSITIVE_KV_PATTERN, "[REDACTED]")
 }
 
 function redactSensitive(
@@ -123,11 +135,8 @@ export function redactForPrivacy<T>(
 
 export function serializeError(
   error: { name: string; data?: Record<string, unknown> } | undefined,
+  maxLength: number = 12000,
 ): string | null {
   if (!error) return null
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return error.name
-  }
+  return serializeAttribute(error, maxLength)
 }

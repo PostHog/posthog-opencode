@@ -32,14 +32,16 @@ export function buildAiGeneration(
   // during this step already reference the correct parent.
   const spanId = trace.currentGenerationSpanId ?? randomUUID()
 
+  // Use accumulated step input messages (includes user prompt + tool results)
+  // for accurate per-roundtrip context.
   const inputMessages = redactForPrivacy(
-    trace.userPrompt ? [{ role: "user", content: trace.userPrompt }] : null,
+    trace.stepInputMessages.length > 0 ? trace.stepInputMessages : null,
     config.privacyMode,
   )
 
   const outputChoices = redactForPrivacy(
-    trace.lastAssistantText
-      ? [{ role: "assistant", content: trace.lastAssistantText }]
+    trace.stepAssistantText
+      ? [{ role: "assistant", content: trace.stepAssistantText }]
       : null,
     config.privacyMode,
   )
@@ -67,7 +69,7 @@ export function buildAiGeneration(
       $ai_output_choices: outputChoices,
 
       $ai_is_error: assistantInfo?.error ? true : false,
-      $ai_error: serializeError(assistantInfo?.error),
+      $ai_error: serializeError(assistantInfo?.error, config.maxAttributeLength),
 
       $ai_lib: "opencode-posthog",
       $ai_lib_version: VERSION,
@@ -119,7 +121,9 @@ export function buildAiSpan(
       $ai_output_state: outputState,
 
       $ai_is_error: isError,
-      $ai_error: isError ? (toolState as ToolStateError).error : null,
+      $ai_error: isError
+        ? serializeAttribute((toolState as ToolStateError).error, config.maxAttributeLength)
+        : null,
 
       $ai_lib: "opencode-posthog",
       $ai_lib_version: VERSION,
@@ -156,7 +160,9 @@ export function buildAiTrace(
       $ai_total_output_tokens: trace.totalOutputTokens,
 
       $ai_is_error: trace.hadError,
-      $ai_error: trace.lastError ?? null,
+      $ai_error: trace.lastError
+        ? serializeAttribute(trace.lastError, config.maxAttributeLength)
+        : null,
 
       $ai_lib: "opencode-posthog",
       $ai_lib_version: VERSION,

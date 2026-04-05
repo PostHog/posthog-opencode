@@ -9,6 +9,7 @@ import type {
   ToolStateCompleted,
   ToolStateError,
 } from "@opencode-ai/sdk"
+import { PostHog } from "posthog-node"
 import { randomUUID } from "node:crypto"
 import { loadConfig, serializeAttribute } from "./utils.js"
 import { buildAiGeneration, buildAiSpan, buildAiTrace } from "./events.js"
@@ -20,26 +21,15 @@ export const PostHogPlugin: Plugin = async () => {
 
   if (!config.enabled || !config.apiKey) return {}
 
-  let client: import("posthog-node").PostHog | null = null
+  const client = new PostHog(config.apiKey, {
+    host: config.host,
+    flushAt: 20,
+    flushInterval: 10_000,
+  })
 
-  async function ensureClient(): Promise<import("posthog-node").PostHog | null> {
-    if (client) return client
+  function safeCapture(event: CaptureEvent) {
     try {
-      const { PostHog } = await import("posthog-node")
-      client = new PostHog(config.apiKey, {
-        host: config.host,
-        flushAt: 20,
-        flushInterval: 10_000,
-      })
-      return client
-    } catch {
-      return null
-    }
-  }
-
-  function safeCapture(phClient: import("posthog-node").PostHog, event: CaptureEvent) {
-    try {
-      phClient.capture({
+      client.capture({
         distinctId: event.distinctId,
         event: event.event,
         properties: event.properties,
@@ -115,7 +105,7 @@ export const PostHogPlugin: Plugin = async () => {
     }
   }
 
-  async function handlePartUpdated(event: Event) {
+  function handlePartUpdated(event: Event) {
     if (event.type !== "message.part.updated") return
     const part = event.properties.part
 
@@ -127,10 +117,10 @@ export const PostHogPlugin: Plugin = async () => {
         handleStepStart(part)
         break
       case "step-finish":
-        await handleStepFinish(part)
+        handleStepFinish(part)
         break
       case "tool":
-        await handleToolPart(part)
+        handleToolPart(part)
         break
     }
   }
@@ -161,10 +151,7 @@ export const PostHogPlugin: Plugin = async () => {
     trace.stepAssistantText = undefined
   }
 
-  async function handleStepFinish(part: StepFinishPart) {
-    const phClient = await ensureClient()
-    if (!phClient) return
-
+  function handleStepFinish(part: StepFinishPart) {
     const trace = traces.get(part.sessionID)
     if (!trace) return
 
@@ -176,21 +163,18 @@ export const PostHogPlugin: Plugin = async () => {
     trace.totalCost += part.cost
 
     const generation = buildAiGeneration(part, assistantInfo, trace, config)
-    safeCapture(phClient, generation)
+    safeCapture(generation)
   }
 
-  async function handleToolPart(part: ToolPart) {
+  function handleToolPart(part: ToolPart) {
     if (part.state.status !== "completed" && part.state.status !== "error") return
-
-    const phClient = await ensureClient()
-    if (!phClient) return
 
     const trace = traces.get(part.sessionID)
     if (!trace) return
 
     const toolState = part.state as ToolStateCompleted | ToolStateError
     const span = buildAiSpan(part.tool, toolState, trace, config)
-    safeCapture(phClient, span)
+    safeCapture(span)
 
     // Feed tool result into step input so subsequent generations include
     // the tool context the model actually saw.
@@ -212,18 +196,15 @@ export const PostHogPlugin: Plugin = async () => {
   async function handleSessionIdle(event: Event) {
     if (event.type !== "session.idle") return
 
-    const phClient = await ensureClient()
-    if (!phClient) return
-
     const sessionId = event.properties.sessionID
     const trace = traces.get(sessionId)
     if (!trace) return
 
     const traceEvent = buildAiTrace(trace, config)
-    safeCapture(phClient, traceEvent)
+    safeCapture(traceEvent)
 
     try {
-      await phClient.flush()
+      await client.flush()
     } catch {
       // ignore flush errors
     }
@@ -231,7 +212,7 @@ export const PostHogPlugin: Plugin = async () => {
     traces.delete(sessionId)
   }
 
-  async function handleSessionError(event: Event) {
+  function handleSessionError(event: Event) {
     if (event.type !== "session.error") return
 
     const sessionId = event.properties.sessionID
@@ -246,9 +227,6 @@ export const PostHogPlugin: Plugin = async () => {
     }
   }
 
-  // Initialize client eagerly
-  await ensureClient()
-
   return {
     event: async ({ event }) => {
       try {
@@ -257,13 +235,13 @@ export const PostHogPlugin: Plugin = async () => {
             handleMessageUpdated(event)
             break
           case "message.part.updated":
-            await handlePartUpdated(event)
+            handlePartUpdated(event)
             break
           case "session.idle":
             await handleSessionIdle(event)
             break
           case "session.error":
-            await handleSessionError(event)
+            handleSessionError(event)
             break
         }
       } catch {

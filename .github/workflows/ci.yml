@@ -38,10 +38,10 @@ jobs:
               uses: ./.github/actions/setup
 
             - name: Typecheck
-              run: pnpm typecheck
+              run: bun run typecheck
 
             - name: Lint
-              run: pnpm lint
+              run: bun run lint
 
             - name: Test
-              run: pnpm test
+              run: bun run test

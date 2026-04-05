@@ -56,6 +56,7 @@ function makeTrace(overrides?: Partial<TraceState>): TraceState {
         userPrompt: 'Hello',
         lastAssistantText: 'Hi there!',
         stepInputMessages: [{ role: 'user', content: 'Hello' }],
+        stepInputSnapshot: [{ role: 'user', content: 'Hello' }],
         stepAssistantText: 'Hi there!',
         messageIds: new Set<string>(),
         ...overrides,
@@ -103,8 +104,8 @@ describe('buildAiGeneration', () => {
         expect(result.properties.$ai_input_tokens).toBe(100)
         expect(result.properties.$ai_output_tokens).toBe(50)
         expect(result.properties.$ai_reasoning_tokens).toBe(10)
-        expect(result.properties.$ai_cache_read_input_tokens).toBe(5)
-        expect(result.properties.$ai_cache_creation_input_tokens).toBe(3)
+        expect(result.properties.cache_read_input_tokens).toBe(5)
+        expect(result.properties.cache_creation_input_tokens).toBe(3)
         expect(result.properties.$ai_total_cost_usd).toBe(0.003)
         expect(result.properties.$ai_stop_reason).toBe('stop')
         expect(result.properties.$ai_is_error).toBe(false)
@@ -130,10 +131,10 @@ describe('buildAiGeneration', () => {
         expect(typeof result.properties.$ai_span_id).toBe('string')
     })
 
-    it('includes input and output content from step messages', () => {
+    it('includes input and output content from step snapshot', () => {
         const trace = makeTrace({
             userPrompt: 'What is 2+2?',
-            stepInputMessages: [{ role: 'user', content: 'What is 2+2?' }],
+            stepInputSnapshot: [{ role: 'user', content: 'What is 2+2?' }],
             stepAssistantText: '4',
             lastAssistantText: '4',
         })
@@ -142,9 +143,10 @@ describe('buildAiGeneration', () => {
         expect(result.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: '4' }])
     })
 
-    it('includes tool results in input for multi-step generations', () => {
+    it('includes prior tool results in input for multi-step generations', () => {
         const trace = makeTrace({
-            stepInputMessages: [
+            // Snapshot was taken at step-start, before current-step tools ran
+            stepInputSnapshot: [
                 { role: 'user', content: 'Read the file' },
                 { role: 'tool', content: '[read] file contents here' },
             ],

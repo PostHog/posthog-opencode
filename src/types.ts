@@ -25,8 +25,10 @@ export interface TraceState {
     lastError?: string
     userPrompt?: string
     lastAssistantText?: string
-    /** Accumulated input context for the current step (user prompt + tool results). */
+    /** Accumulated input context across steps (user prompt + tool results from prior steps). */
     stepInputMessages: InputMessage[]
+    /** Snapshot of stepInputMessages taken at step-start, used as $ai_input for the generation. */
+    stepInputSnapshot: InputMessage[]
     /** Assistant text accumulated during the current step, reset on each step-start. */
     stepAssistantText?: string
     currentAssistantMsg?: AssistantInfo

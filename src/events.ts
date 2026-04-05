@@ -32,10 +32,10 @@ export function buildAiGeneration(
     // during this step already reference the correct parent.
     const spanId = trace.currentGenerationSpanId ?? randomUUID()
 
-    // Use accumulated step input messages (includes user prompt + tool results)
-    // for accurate per-roundtrip context.
+    // Use the snapshot taken at step-start, which contains context the model
+    // actually saw (user prompt + prior tool results), not current-step tools.
     const inputMessages = redactForPrivacy(
-        trace.stepInputMessages.length > 0 ? trace.stepInputMessages : null,
+        trace.stepInputSnapshot.length > 0 ? trace.stepInputSnapshot : null,
         config.privacyMode
     )
 
@@ -57,8 +57,8 @@ export function buildAiGeneration(
             $ai_input_tokens: part.tokens.input,
             $ai_output_tokens: part.tokens.output,
             $ai_reasoning_tokens: part.tokens.reasoning,
-            $ai_cache_read_input_tokens: part.tokens.cache.read,
-            $ai_cache_creation_input_tokens: part.tokens.cache.write,
+            cache_read_input_tokens: part.tokens.cache.read,
+            cache_creation_input_tokens: part.tokens.cache.write,
 
             $ai_total_cost_usd: part.cost,
             $ai_stop_reason: mapStopReason(part.reason),

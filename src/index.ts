@@ -58,6 +58,7 @@ export const PostHogPlugin: Plugin = async () => {
                 totalCost: 0,
                 hadError: false,
                 stepInputMessages: [],
+                stepInputSnapshot: [],
                 messageIds: new Set(),
             }
             traces.set(sessionId, trace)
@@ -81,6 +82,7 @@ export const PostHogPlugin: Plugin = async () => {
                 hadError: false,
                 agentName: msg.agent,
                 stepInputMessages: [],
+                stepInputSnapshot: [],
                 messageIds: new Set([msg.id]),
             }
             traces.set(msg.sessionID, trace)
@@ -150,6 +152,10 @@ export const PostHogPlugin: Plugin = async () => {
         // Allocate the generation span ID eagerly so that tool spans
         // emitted during this step can reference it as their parent.
         trace.currentGenerationSpanId = randomUUID()
+        // Snapshot current input messages before tools run, so the
+        // generation reports only what the model saw as input, not
+        // the tool results from the current step.
+        trace.stepInputSnapshot = [...trace.stepInputMessages]
         // Reset per-step assistant text for the new generation
         trace.stepAssistantText = undefined
     }

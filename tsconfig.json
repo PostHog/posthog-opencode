@@ -8,8 +8,13 @@
         "skipLibCheck": true,
         "noEmit": true,
         "declaration": true,
+        "declarationDir": "./dist",
+        "outDir": "./dist",
+        "rootDir": "./src",
         "isolatedModules": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "types": ["bun-types"]
     },
-    "include": ["src"]
+    "include": ["src"],
+    "exclude": ["node_modules", "dist"]
 }

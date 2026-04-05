@@ -12,7 +12,7 @@ Add to your `opencode.json`:
 }
 ```
 
-Or for local development, copy `src/index.ts` to `.opencode/plugins/posthog.ts`.
+For local development, clone or symlink this repo into `.opencode/plugins/` and ensure `posthog-node` is installed (add it to `.opencode/package.json`).
 
 ## Configuration
 

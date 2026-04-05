@@ -57,6 +57,7 @@ function makeTrace(overrides?: Partial<TraceState>): TraceState {
     lastAssistantText: "Hi there!",
     stepInputMessages: [{ role: "user", content: "Hello" }],
     stepAssistantText: "Hi there!",
+    messageIds: new Set<string>(),
     ...overrides,
   }
 }

@@ -32,6 +32,8 @@ export interface TraceState {
   currentAssistantMsg?: AssistantInfo
   currentGenerationSpanId?: string
   agentName?: string
+  /** Message IDs belonging to this trace, for cleanup. */
+  messageIds: Set<string>
 }
 
 export interface AssistantInfo {

@@ -58,6 +58,7 @@ export const PostHogPlugin: Plugin = async () => {
         totalCost: 0,
         hadError: false,
         stepInputMessages: [],
+        messageIds: new Set(),
       }
       traces.set(sessionId, trace)
     }
@@ -80,6 +81,7 @@ export const PostHogPlugin: Plugin = async () => {
         hadError: false,
         agentName: msg.agent,
         stepInputMessages: [],
+        messageIds: new Set([msg.id]),
       }
       traces.set(msg.sessionID, trace)
       messageRoles.set(msg.id, "user")
@@ -97,6 +99,7 @@ export const PostHogPlugin: Plugin = async () => {
 
       // Update trace with current assistant info
       const trace = getOrCreateTrace(assistant.sessionID)
+      trace.messageIds.add(assistant.id)
       trace.currentAssistantMsg = info
       if (assistant.error) {
         trace.hadError = true
@@ -177,16 +180,19 @@ export const PostHogPlugin: Plugin = async () => {
     safeCapture(span)
 
     // Feed tool result into step input so subsequent generations include
-    // the tool context the model actually saw.
+    // the tool context the model actually saw. Redact and truncate to
+    // match the treatment applied to $ai_span fields.
     if (toolState.status === "completed") {
+      const redacted = serializeAttribute(toolState.output, config.maxAttributeLength) ?? ""
       trace.stepInputMessages.push({
         role: "tool",
-        content: `[${part.tool}] ${toolState.output}`,
+        content: `[${part.tool}] ${redacted}`,
       })
     } else {
+      const redacted = serializeAttribute(toolState.error, config.maxAttributeLength) ?? ""
       trace.stepInputMessages.push({
         role: "tool",
-        content: `[${part.tool}] ERROR: ${toolState.error}`,
+        content: `[${part.tool}] ERROR: ${redacted}`,
       })
       trace.hadError = true
       trace.lastError = toolState.error
@@ -209,6 +215,11 @@ export const PostHogPlugin: Plugin = async () => {
       // ignore flush errors
     }
 
+    // Clean up per-message state for this trace
+    for (const msgId of trace.messageIds) {
+      messageRoles.delete(msgId)
+      assistantMessages.delete(msgId)
+    }
     traces.delete(sessionId)
   }
 

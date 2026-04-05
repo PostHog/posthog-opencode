@@ -17,7 +17,7 @@ const STOP_REASON_MAP: Record<string, string> = {
   error: "error",
 }
 
-function mapStopReason(reason: string | undefined): string | null {
+export function mapStopReason(reason: string | undefined): string | null {
   if (!reason) return null
   return STOP_REASON_MAP[reason] ?? reason
 }

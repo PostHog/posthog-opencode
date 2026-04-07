@@ -38,5 +38,7 @@ jobs:
                   commit: Version packages
                   title: Version packages
               env:
-                  GITHUB_TOKEN: ${{ github.token }}
+                  # Fall back to the default workflow token, but allow a PAT/App token
+                  # because GitHub can block PR creation with `github.token` at the repo level.
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
                   NPM_CONFIG_PROVENANCE: true

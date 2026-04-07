@@ -37,6 +37,8 @@ bun run changeset
 
 Merges to `main` open or update a Changesets release pull request with the pending version and changelog updates. Merging that release pull request publishes the package to npm and creates a GitHub release.
 
+If GitHub Actions fails with `GitHub Actions is not permitted to create or approve pull requests`, either enable `Allow GitHub Actions to create and approve pull requests` in the repository Actions settings or add a `RELEASE_GITHUB_TOKEN` secret with repo write access. The release workflow prefers that secret and otherwise falls back to the default workflow token.
+
 Routine CI, config, or docs-only changes do not need a changeset unless a maintainer decides they should be released. This repo does not add PR-level changeset enforcement.
 
 ## Configuration

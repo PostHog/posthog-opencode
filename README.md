@@ -27,6 +27,18 @@ Place the plugin source in your project's `.opencode/plugins/` directory (or `~/
 }
 ```
 
+## Releasing
+
+For publishable changes, add a changeset with:
+
+```sh
+bun run changeset
+```
+
+Merges to `main` open or update a Changesets release pull request with the pending version and changelog updates. Merging that release pull request publishes the package to npm and creates a GitHub release.
+
+Routine CI, config, or docs-only changes do not need a changeset unless a maintainer decides they should be released. This repo does not add PR-level changeset enforcement.
+
 ## Configuration
 
 All configuration is via environment variables:

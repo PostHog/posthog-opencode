@@ -1,6 +1,6 @@
 {
     "name": "opencode-posthog",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "description": "PostHog LLM Analytics plugin for OpenCode",
     "author": "Nejc Drobnič <nejc@nejc.dev>",
     "license": "MIT",

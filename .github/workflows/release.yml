@@ -39,5 +39,4 @@ jobs:
                   title: Version packages
               env:
                   GITHUB_TOKEN: ${{ github.token }}
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
                   NPM_CONFIG_PROVENANCE: true

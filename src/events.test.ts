@@ -112,7 +112,7 @@ describe('buildAiGeneration', () => {
         expect(result.properties.$ai_trace_id).toBe('trace-123')
         expect(result.properties.$ai_span_id).toBe('gen-span-1')
         expect(result.properties.$ai_session_id).toBe('session-1')
-        expect(result.properties.$ai_lib).toBe('opencode-posthog')
+        expect(result.properties.$ai_lib).toBe('posthog-opencode')
         expect(result.properties.$ai_framework).toBe('opencode')
         expect(result.properties.$ai_project_name).toBe('my-project')
         expect(result.properties.$ai_agent_name).toBe('my-project')
@@ -220,7 +220,7 @@ describe('buildAiSpan', () => {
         expect(result.properties.$ai_error).toBeNull()
         expect(result.properties.$ai_input_state).toBe('{"command":"ls -la"}')
         expect(result.properties.$ai_output_state).toBe('file1.txt\nfile2.txt')
-        expect(result.properties.$ai_lib).toBe('opencode-posthog')
+        expect(result.properties.$ai_lib).toBe('posthog-opencode')
         expect(result.properties.$ai_framework).toBe('opencode')
     })
 
@@ -287,7 +287,7 @@ describe('buildAiTrace', () => {
         expect(result.properties.$ai_total_output_tokens).toBe(200)
         expect(result.properties.$ai_is_error).toBe(false)
         expect(result.properties.$ai_span_name).toBe('my-project')
-        expect(result.properties.$ai_lib).toBe('opencode-posthog')
+        expect(result.properties.$ai_lib).toBe('posthog-opencode')
         expect(result.properties.$ai_framework).toBe('opencode')
     })
 

@@ -1,8 +1,11 @@
 {
-    "name": "opencode-posthog",
+    "name": "@posthog/opencode",
     "version": "0.1.0",
     "description": "PostHog LLM Analytics plugin for OpenCode",
-    "author": "Nejc Drobnič <nejc@nejc.dev>",
+    "author": "PostHog",
+    "contributors": [
+        "Nejc Drobnič <nejc@nejc.dev>"
+    ],
     "license": "MIT",
     "type": "module",
     "main": "./dist/index.js",
@@ -29,12 +32,16 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Quantumlyy/opencode-posthog.git"
+        "url": "git+https://github.com/PostHog/posthog-opencode.git"
     },
     "bugs": {
-        "url": "https://github.com/Quantumlyy/opencode-posthog/issues"
+        "url": "https://github.com/PostHog/posthog-opencode/issues"
     },
-    "homepage": "https://github.com/Quantumlyy/opencode-posthog#readme",
+    "homepage": "https://github.com/PostHog/posthog-opencode#readme",
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target node",
         "changeset": "changeset",

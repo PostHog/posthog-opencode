@@ -69,7 +69,7 @@ export function buildAiGeneration(
             $ai_is_error: !!assistantInfo?.error,
             $ai_error: serializeError(assistantInfo?.error, config.maxAttributeLength),
 
-            $ai_lib: 'opencode-posthog',
+            $ai_lib: 'posthog-opencode',
             $ai_lib_version: VERSION,
             $ai_framework: 'opencode',
             $ai_project_name: config.projectName,
@@ -123,7 +123,7 @@ export function buildAiSpan(
                 ? serializeAttribute((toolState as ToolStateError).error, config.maxAttributeLength)
                 : null,
 
-            $ai_lib: 'opencode-posthog',
+            $ai_lib: 'posthog-opencode',
             $ai_lib_version: VERSION,
             $ai_framework: 'opencode',
             $ai_project_name: config.projectName,
@@ -154,7 +154,7 @@ export function buildAiTrace(trace: TraceState, config: PluginConfig): CaptureEv
             $ai_is_error: trace.hadError,
             $ai_error: trace.lastError ? serializeAttribute(trace.lastError, config.maxAttributeLength) : null,
 
-            $ai_lib: 'opencode-posthog',
+            $ai_lib: 'posthog-opencode',
             $ai_lib_version: VERSION,
             $ai_framework: 'opencode',
             $ai_project_name: config.projectName,

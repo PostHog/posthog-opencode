@@ -1,3 +1,1 @@
-import pkg from '../package.json'
-
-export const VERSION: string = pkg.version
+export const VERSION = '0.1.0'

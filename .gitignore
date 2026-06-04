@@ -1,4 +1,8 @@
 node_modules/
 dist/
+.pnpm-store/
 *.tsbuildinfo
 .context/
+
+# Claude Code local settings (contains API keys)
+.claude/settings.local.json

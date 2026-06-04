@@ -245,6 +245,8 @@ export const PostHogPlugin: Plugin = async () => {
         }
     }
 
+    let disposed = false
+
     return {
         event: async ({ event }) => {
             try {
@@ -262,6 +264,21 @@ export const PostHogPlugin: Plugin = async () => {
                         handleSessionError(event)
                         break
                 }
+            } catch {
+                // never crash OpenCode
+            }
+        },
+        // Flush and shut down the PostHog client when OpenCode tears the plugin
+        // down. posthog-node's flush() resolves before the HTTP send actually
+        // completes, so a short-lived `opencode run` invocation would otherwise
+        // exit and drop its final events. shutdown() drains all pending events and
+        // awaits the network round-trip. OpenCode awaits this dispose hook during
+        // teardown (it is registered as a scope finalizer).
+        dispose: async () => {
+            if (disposed) return
+            disposed = true
+            try {
+                await client.shutdown()
             } catch {
                 // never crash OpenCode
             }

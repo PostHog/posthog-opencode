@@ -71,6 +71,13 @@ export const PostHogPlugin: Plugin = async () => {
         const msg = event.properties.info
 
         if (msg.role === 'user') {
+            // OpenCode emits `message.updated` for the same user message several
+            // times per turn. Only start a new trace the first time we see a given
+            // user message — a repeat update must not reset the trace, or it wipes
+            // the captured prompt ($ai_input) and the assistant model info for the
+            // turn (both are accumulated on the trace before step-finish fires).
+            if (messageRoles.get(msg.id) === 'user') return
+
             // New user message → new trace
             const trace: TraceState = {
                 traceId: randomUUID(),
@@ -164,7 +171,10 @@ export const PostHogPlugin: Plugin = async () => {
         const trace = traces.get(part.sessionID)
         if (!trace) return
 
-        const assistantInfo = trace.currentAssistantMsg
+        // The step belongs to a specific assistant message; prefer that message's
+        // model/provider info (looked up by messageID) over the trace's "current"
+        // assistant pointer, which can lag behind streaming updates.
+        const assistantInfo = assistantMessages.get(part.messageID) ?? trace.currentAssistantMsg
 
         // Accumulate tokens and cost
         trace.totalInputTokens += part.tokens.input
@@ -245,6 +255,8 @@ export const PostHogPlugin: Plugin = async () => {
         }
     }
 
+    let disposed = false
+
     return {
         event: async ({ event }) => {
             try {
@@ -262,6 +274,21 @@ export const PostHogPlugin: Plugin = async () => {
                         handleSessionError(event)
                         break
                 }
+            } catch {
+                // never crash OpenCode
+            }
+        },
+        // Flush and shut down the PostHog client when OpenCode tears the plugin
+        // down. posthog-node's flush() resolves before the HTTP send actually
+        // completes, so a short-lived `opencode run` invocation would otherwise
+        // exit and drop its final events. shutdown() drains all pending events and
+        // awaits the network round-trip. OpenCode awaits this dispose hook during
+        // teardown (it is registered as a scope finalizer).
+        dispose: async () => {
+            if (disposed) return
+            disposed = true
+            try {
+                await client.shutdown()
             } catch {
                 // never crash OpenCode
             }

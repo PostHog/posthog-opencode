@@ -1,44 +1,300 @@
-name: Release
+name: 'Release'
 
 on:
-    push:
+    pull_request:
+        types: [closed]
         branches: [main]
     workflow_dispatch:
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
-
 permissions:
-    contents: write
-    pull-requests: write
-    id-token: write
+    contents: read
+
+# Concurrency control: only one release process can run at a time
+# This prevents race conditions if multiple PRs with 'release' label merge simultaneously
+concurrency:
+    group: release
+    cancel-in-progress: false
 
 jobs:
-    release:
-        name: Release
+    check-release-label:
+        name: Check for release label
         runs-on: ubuntu-latest
+        # Run when PR with 'release' label is merged to main, or on manual dispatch
+        if: |
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'pull_request' &&
+             github.event.pull_request.merged == true &&
+             contains(github.event.pull_request.labels.*.name, 'release'))
+        outputs:
+            should-release: ${{ steps.check.outputs.should-release }}
         steps:
-            - uses: actions/checkout@v6
+            - name: Checkout repository
+              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
               with:
+                  ref: main
                   fetch-depth: 0
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v6
+            - name: Check release conditions
+              id: check
+              run: |
+                  changeset_count=$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l)
+                  if [ "$changeset_count" -gt 0 ]; then
+                    echo "should-release=true" >> "$GITHUB_OUTPUT"
+                    echo "Found $changeset_count changeset(s), ready to release"
+                  else
+                    echo "should-release=false" >> "$GITHUB_OUTPUT"
+                    echo "No changesets to release"
+                  fi
+
+    notify-approval-needed:
+        name: Notify Slack - Approval Needed
+        needs: check-release-label
+        if: needs.check-release-label.outputs.should-release == 'true'
+        uses: posthog/.github/.github/workflows/notify-approval-needed.yml@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+        with:
+            slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+            slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+        secrets:
+            slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+            posthog_project_api_key: ${{ secrets.POSTHOG_PROJECT_API_KEY }}
+
+    version-bump:
+        name: Bump version and commit to main
+        needs: [check-release-label, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.check-release-label.outputs.should-release == 'true'
+        environment: 'Release'
+        permissions:
+            contents: write
+        outputs:
+            committed: ${{ steps.commit-version-bump.outputs.committed }}
+            new-version: ${{ steps.apply-changesets.outputs.new-version }}
+        steps:
+            - name: Notify Slack - Approved
+              continue-on-error: true
+              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
               with:
-                  node-version: 24
-                  registry-url: https://registry.npmjs.org
-                  package-manager-cache: false
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '✅ Release approved! Version bump in progress...'
+                  emoji_reaction: 'white_check_mark'
+
+            - name: Get GitHub App token
+              id: releaser
+              uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+              with:
+                  app-id: ${{ secrets.GH_APP_POSTHOG_OPENCODE_RELEASER_APP_ID }}
+                  private-key: ${{ secrets.GH_APP_POSTHOG_OPENCODE_RELEASER_PRIVATE_KEY }}
+
+            - name: Checkout repository
+              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+              with:
+                  ref: main
+                  fetch-depth: 0
+                  token: ${{ steps.releaser.outputs.token }}
+
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
 
             - name: Setup environment
               uses: ./.github/actions/setup
 
-            - name: Create Release Pull Request or Publish to npm
-              uses: changesets/action@v1
-              with:
-                  publish: bun run release
-                  commit: Version packages
-                  title: Version packages
+            - name: Apply changesets and update version
+              id: apply-changesets
+              run: |
+                  pnpm changeset version
+                  new_version=$(node -p "require('./package.json').version")
+                  echo "new-version=$new_version" >> "$GITHUB_OUTPUT"
+
+            - name: Sync version.ts
               env:
-                  # Fall back to the default workflow token, but allow a PAT/App token
-                  # because GitHub can block PR creation with `github.token` at the repo level.
-                  GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+                  NEW_VERSION: ${{ steps.apply-changesets.outputs.new-version }}
+              run: |
+                  sed -i "s/export const VERSION = '.*'/export const VERSION = '${NEW_VERSION}'/" src/version.ts
+
+            - name: Update lockfile
+              run: pnpm install --no-frozen-lockfile
+
+            - name: Commit version bump and lockfile
+              id: commit-version-bump
+              env:
+                  GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
+                  NEW_VERSION: ${{ steps.apply-changesets.outputs.new-version }}
+              run: |
+                  git add -A
+                  if git diff --staged --quiet; then
+                    echo "No changes to commit"
+                    echo "committed=false" >> "$GITHUB_OUTPUT"
+                  else
+                    git commit -m "chore: release ${NEW_VERSION} [version bump]"
+                    git push origin main
+                    echo "committed=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+    notify-rejected:
+        name: Notify Slack - Rejected
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Check for rejection
+              id: check-rejection
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  RESPONSE=$(gh api /repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/approvals)
+                  REJECTED=$(echo "$RESPONSE" | jq '[.[] | select(.state == "rejected")] | length')
+                  if [ "$REJECTED" -gt 0 ]; then
+                    echo "was_rejected=true" >> "$GITHUB_OUTPUT"
+                    COMMENT=$(echo "$RESPONSE" | jq -r '.[] | select(.state == "rejected") | .comment // empty' | head -1)
+                    if [ -n "$COMMENT" ]; then
+                      {
+                        echo 'message<<EOF'
+                        echo "🚫 Release was rejected: $COMMENT"
+                        echo 'EOF'
+                      } >> "$GITHUB_OUTPUT"
+                    else
+                      echo "message=🚫 Release was rejected." >> "$GITHUB_OUTPUT"
+                    fi
+                  else
+                    echo "was_rejected=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Notify Slack - Rejected
+              if: steps.check-rejection.outputs.was_rejected == 'true'
+              continue-on-error: true
+              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '${{ steps.check-rejection.outputs.message }}'
+                  emoji_reaction: 'no_entry_sign'
+
+    publish:
+        name: Publish to NPM
+        needs: [version-bump, notify-approval-needed]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.committed == 'true'
+        permissions:
+            contents: write
+            id-token: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+              with:
+                  ref: main
+                  fetch-depth: 0
+
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+
+            - name: Check package version
+              id: check-package-version
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2
+
+            - name: Typecheck
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm typecheck
+
+            - name: Lint
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm lint
+
+            - name: Test
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm test
+
+            - name: Build
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm build
+
+            - name: Tag repository
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  git tag -a "$COMMITTED_VERSION" -m "$COMMITTED_VERSION"
+
+            - name: Publish to NPM
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: pnpm publish --access public --no-git-checks
+              env:
                   NPM_CONFIG_PROVENANCE: true
+
+            - name: Push tag to GitHub
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  git push origin "$COMMITTED_VERSION"
+
+            - name: Create GitHub Release
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  COMMITTED_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+                  GH_REPOSITORY: ${{ github.repository }}
+              run: |
+                  LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1; next} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                  gh api \
+                    --method POST \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "/repos/${GH_REPOSITORY}/releases" \
+                    -f tag_name="$COMMITTED_VERSION" \
+                    -f target_commitish='main' \
+                    -f name="$COMMITTED_VERSION" \
+                    -f body="$LAST_CHANGELOG_ENTRY" \
+                    -F draft=false \
+                    -F prerelease=false \
+                    -F generate_release_notes=false
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-opencode-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "version": "${{ steps.check-package-version.outputs.committed-version }}"
+                      }
+
+            - name: Notify Slack - Failed
+              continue-on-error: true
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Failed to release `@posthog/opencode@${{ steps.check-package-version.outputs.committed-version }}`! <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>'
+                  emoji_reaction: 'x'
+
+    notify-released:
+        name: Notify Slack - Released
+        needs: [notify-approval-needed, publish]
+        runs-on: ubuntu-latest
+        if: always() && needs.publish.result == 'success' && needs.notify-approval-needed.outputs.slack_ts != ''
+        steps:
+            - name: Notify Slack - Released
+              continue-on-error: true
+              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '🚀 `@posthog/opencode` released successfully!'
+                  emoji_reaction: 'rocket'

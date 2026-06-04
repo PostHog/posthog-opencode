@@ -1,15 +1,15 @@
-# opencode-posthog
+# @posthog/opencode
 
 PostHog LLM Analytics plugin for [OpenCode](https://opencode.ai). Captures LLM generations, tool executions, and conversation traces, sending them to PostHog as structured `$ai_*` events for the LLM Analytics dashboard.
 
 ## Installation
 
-Add `opencode-posthog` to your `opencode.json`:
+Add `@posthog/opencode` to your `opencode.json`:
 
 ```json
 {
     "$schema": "https://opencode.ai/config.json",
-    "plugin": ["opencode-posthog"]
+    "plugin": ["@posthog/opencode"]
 }
 ```
 
@@ -84,6 +84,10 @@ Emitted on `session.idle` (agent finished responding). Properties include:
 When `POSTHOG_PRIVACY_MODE=true`, all content fields (`$ai_input`, `$ai_output_choices`, `$ai_input_state`, `$ai_output_state`) are set to `null`. Token counts, costs, latency, and model metadata still flow.
 
 Sensitive keys (matching `api_key`, `token`, `secret`, `password`, `authorization`, `credential`, `private_key`) are always redacted in tool inputs/outputs regardless of privacy mode.
+
+## Credits
+
+Originally created by [Nejc Drobnič](https://github.com/Quantumlyy) and adopted as an official PostHog plugin.
 
 ## License
 

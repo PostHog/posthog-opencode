@@ -1,0 +1,9 @@
+packages:
+    - '.'
+
+# Supply-chain hardening: don't install package versions newer than 7 days
+# (matches the PostHog monorepo). Our own packages are exempt.
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+    - posthog-node
+    - '@posthog/*'

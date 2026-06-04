@@ -1,4 +1,4 @@
-# opencode-posthog
+# @posthog/opencode
 
 ## 0.1.0
 

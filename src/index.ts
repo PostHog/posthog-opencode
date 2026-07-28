@@ -59,6 +59,7 @@ export const PostHogPlugin: Plugin = async () => {
                 hadError: false,
                 stepInputMessages: [],
                 stepInputSnapshot: [],
+                stepToolCalls: [],
                 messageIds: new Set(),
             }
             traces.set(sessionId, trace)
@@ -90,6 +91,7 @@ export const PostHogPlugin: Plugin = async () => {
                 agentName: msg.agent,
                 stepInputMessages: [],
                 stepInputSnapshot: [],
+                stepToolCalls: [],
                 messageIds: new Set([msg.id]),
             }
             traces.set(msg.sessionID, trace)
@@ -165,6 +167,9 @@ export const PostHogPlugin: Plugin = async () => {
         trace.stepInputSnapshot = [...trace.stepInputMessages]
         // Reset per-step assistant text for the new generation
         trace.stepAssistantText = undefined
+        // Reset per-step tool calls; they are attributed to the generation
+        // whose span ID was just allocated above.
+        trace.stepToolCalls = []
     }
 
     function handleStepFinish(part: StepFinishPart) {
@@ -194,6 +199,10 @@ export const PostHogPlugin: Plugin = async () => {
         const toolState = part.state as ToolStateCompleted | ToolStateError
         const span = buildAiSpan(part.tool, toolState, trace, config)
         safeCapture(span)
+
+        // Also record the name on the step, so the generation can report which
+        // tools it called. The span above is parented to the same generation.
+        trace.stepToolCalls.push(part.tool)
 
         // Feed tool result into step input so subsequent generations include
         // the tool context the model actually saw. Redact and truncate to

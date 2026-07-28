@@ -31,6 +31,8 @@ export interface TraceState {
     stepInputSnapshot: InputMessage[]
     /** Assistant text accumulated during the current step, reset on each step-start. */
     stepAssistantText?: string
+    /** Names of tools called during the current step, in call order, reset on each step-start. */
+    stepToolCalls: string[]
     currentAssistantMsg?: AssistantInfo
     currentGenerationSpanId?: string
     agentName?: string

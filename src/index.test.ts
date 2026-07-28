@@ -104,4 +104,93 @@ describe('trace state machine (real OpenCode event ordering)', () => {
         // exactly one trace per user message (no duplicate traces from repeats)
         expect(captured.filter((e) => e.event === '$ai_trace')).toHaveLength(1)
     })
+
+    it("attributes each step's tool calls to that step's generation", async () => {
+        // Two steps: the first calls a tool, the second answers from its result.
+        // Tool parts arrive between step-start and step-finish, which is the same
+        // ordering the existing span parenting already relies on.
+        const tool = (name: string, id: string) => ({
+            type: 'message.part.updated',
+            properties: {
+                part: {
+                    type: 'tool',
+                    id,
+                    sessionID: S,
+                    messageID: A,
+                    tool: name,
+                    state: {
+                        status: 'completed',
+                        input: { path: 'a.txt' },
+                        output: 'file contents',
+                        time: { start: 0, end: 1000 },
+                    },
+                },
+            },
+        })
+        const stepFinish = () => ({
+            type: 'message.part.updated',
+            properties: {
+                part: {
+                    type: 'step-finish',
+                    sessionID: S,
+                    messageID: A,
+                    tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+                    cost: 0,
+                    reason: 'tool-calls',
+                },
+            },
+        })
+
+        await run([
+            {
+                type: 'message.updated',
+                properties: { info: { role: 'user', id: U, sessionID: S, time: { created: 1 }, agent: 'build' } },
+            },
+            {
+                type: 'message.part.updated',
+                properties: { part: { type: 'text', messageID: U, sessionID: S, text: 'read a.txt' } },
+            },
+            {
+                type: 'message.updated',
+                properties: {
+                    info: {
+                        role: 'assistant',
+                        id: A,
+                        sessionID: S,
+                        modelID: 'gpt-5.4-mini',
+                        providerID: 'openai',
+                        time: { created: 1 },
+                    },
+                },
+            },
+            // step 1 — calls two tools
+            { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
+            tool('read', 'part-tool-1'),
+            tool('edit', 'part-tool-2'),
+            stepFinish(),
+            // step 2 — pure text answer, no tools
+            { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
+            {
+                type: 'message.part.updated',
+                properties: { part: { type: 'text', messageID: A, sessionID: S, text: 'Done.' } },
+            },
+            stepFinish(),
+            { type: 'session.idle', properties: { sessionID: S } },
+        ])
+
+        const generations = captured.filter((e) => e.event === '$ai_generation')
+        expect(generations).toHaveLength(2)
+
+        // Step 1 reports both tools, in call order; step 2 reports none.
+        expect(generations[0].properties.$ai_tools_called).toEqual(['read', 'edit'])
+        expect(generations[1].properties.$ai_tools_called).toBeNull()
+
+        // The tool spans are parented to the same generation the names were
+        // attributed to, so both views of the step agree.
+        const spans = captured.filter((e) => e.event === '$ai_span')
+        expect(spans.map((s) => s.properties.$ai_span_name)).toEqual(['read', 'edit'])
+        for (const span of spans) {
+            expect(span.properties.$ai_parent_id).toBe(generations[0].properties.$ai_span_id)
+        }
+    })
 })

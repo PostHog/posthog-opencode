@@ -66,6 +66,14 @@ export function buildAiGeneration(
             $ai_input: inputMessages,
             $ai_output_choices: outputChoices,
 
+            // Tool calls are emitted as $ai_span events too, but PostHog only extracts
+            // tool usage from $ai_generation, so the Tools view stays empty unless the
+            // names are reported here as well. A user-provided value is respected and
+            // normalized server-side, and $ai_tool_call_count is derived from it.
+            // Names only — no arguments — so this carries no more than $ai_span_name,
+            // which is already sent unredacted in privacy mode.
+            $ai_tools_called: trace.stepToolCalls.length > 0 ? [...trace.stepToolCalls] : null,
+
             $ai_is_error: !!assistantInfo?.error,
             $ai_error: serializeError(assistantInfo?.error, config.maxAttributeLength),
 

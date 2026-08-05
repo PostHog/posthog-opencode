@@ -67,7 +67,10 @@ jobs:
         permissions:
             contents: write
         outputs:
-            committed: ${{ steps.check-changes.outputs.committed }}
+            # Whether the release commit actually landed, not merely that there was
+            # something to commit: publish and the "released" Slack notice are gated on
+            # this, so a failed commit step must not read as a successful release.
+            committed: ${{ steps.commit-version-bump.outputs.commit-hash != '' }}
             new-version: ${{ steps.apply-changesets.outputs.new-version }}
         steps:
             - name: Notify Slack - Approved

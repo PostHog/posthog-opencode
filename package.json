@@ -4,7 +4,8 @@
     "description": "PostHog LLM Analytics plugin for OpenCode",
     "author": "PostHog",
     "contributors": [
-        "Nejc Drobnič <nejc@nejc.dev>"
+        "Nejc Drobnič <nejc@nejc.dev>",
+        "PostHog"
     ],
     "license": "MIT",
     "type": "module",

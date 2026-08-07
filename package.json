@@ -66,7 +66,7 @@
         "@changesets/cli": "^2.30.0",
         "@opencode-ai/plugin": "*",
         "@opencode-ai/sdk": "*",
-        "@types/node": "^22.0.0",
+        "@types/node": "^26.1.2",
         "oxfmt": "^0.61.0",
         "oxlint": "^1.55.0",
         "typescript": "^5.8.0",

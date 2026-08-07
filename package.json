@@ -1,6 +1,6 @@
 {
     "name": "@posthog/opencode",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "description": "PostHog LLM Analytics plugin for OpenCode",
     "author": "PostHog",
     "contributors": [

@@ -20,6 +20,7 @@ type AnyEvent = { type: string; properties: Record<string, unknown> }
 async function run(events: AnyEvent[]) {
     process.env.POSTHOG_API_KEY = 'phc_test'
     const hooks = (await PostHogPlugin({} as never)) as { event: (i: { event: AnyEvent }) => Promise<void> }
+    // oxlint-disable-next-line no-await-in-loop -- Event order is significant.
     for (const event of events) await hooks.event({ event })
 }
 
@@ -103,5 +104,102 @@ describe('trace state machine (real OpenCode event ordering)', () => {
 
         // exactly one trace per user message (no duplicate traces from repeats)
         expect(captured.filter((e) => e.event === '$ai_trace')).toHaveLength(1)
+    })
+
+    it("attributes each step's tool calls in invocation order when parallel tools finish out of order", async () => {
+        // Two steps: the first calls parallel tools, the second answers from their results.
+        const tool = (name: string, id: string, status: 'running' | 'completed') => ({
+            type: 'message.part.updated',
+            properties: {
+                part: {
+                    type: 'tool',
+                    id,
+                    callID: id,
+                    sessionID: S,
+                    messageID: A,
+                    tool: name,
+                    state:
+                        status === 'running'
+                            ? {
+                                  status,
+                                  input: { path: 'a.txt' },
+                                  time: { start: 0 },
+                              }
+                            : {
+                                  status,
+                                  input: { path: 'a.txt' },
+                                  output: 'file contents',
+                                  time: { start: 0, end: 1000 },
+                              },
+                },
+            },
+        })
+        const stepFinish = () => ({
+            type: 'message.part.updated',
+            properties: {
+                part: {
+                    type: 'step-finish',
+                    sessionID: S,
+                    messageID: A,
+                    tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+                    cost: 0,
+                    reason: 'tool-calls',
+                },
+            },
+        })
+
+        await run([
+            {
+                type: 'message.updated',
+                properties: { info: { role: 'user', id: U, sessionID: S, time: { created: 1 }, agent: 'build' } },
+            },
+            {
+                type: 'message.part.updated',
+                properties: { part: { type: 'text', messageID: U, sessionID: S, text: 'read a.txt' } },
+            },
+            {
+                type: 'message.updated',
+                properties: {
+                    info: {
+                        role: 'assistant',
+                        id: A,
+                        sessionID: S,
+                        modelID: 'gpt-5.4-mini',
+                        providerID: 'openai',
+                        time: { created: 1 },
+                    },
+                },
+            },
+            // step 1 — invokes read before edit, but edit completes first
+            { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
+            tool('read', 'part-tool-1', 'running'),
+            tool('edit', 'part-tool-2', 'running'),
+            tool('edit', 'part-tool-2', 'completed'),
+            tool('read', 'part-tool-1', 'completed'),
+            stepFinish(),
+            // step 2 — pure text answer, no tools
+            { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
+            {
+                type: 'message.part.updated',
+                properties: { part: { type: 'text', messageID: A, sessionID: S, text: 'Done.' } },
+            },
+            stepFinish(),
+            { type: 'session.idle', properties: { sessionID: S } },
+        ])
+
+        const generations = captured.filter((e) => e.event === '$ai_generation')
+        expect(generations).toHaveLength(2)
+
+        // Step 1 reports both tools in invocation order, as a canonical string;
+        // step 2 reports none.
+        expect(generations[0].properties.$ai_tools_called).toBe('read,edit')
+        expect(generations[1].properties.$ai_tools_called).toBeNull()
+
+        // Spans still arrive in completion order and are parented to the same generation.
+        const spans = captured.filter((e) => e.event === '$ai_span')
+        expect(spans.map((s) => s.properties.$ai_span_name)).toEqual(['edit', 'read'])
+        for (const span of spans) {
+            expect(span.properties.$ai_parent_id).toBe(generations[0].properties.$ai_span_id)
+        }
     })
 })

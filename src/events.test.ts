@@ -58,6 +58,8 @@ function makeTrace(overrides?: Partial<TraceState>): TraceState {
         stepInputMessages: [{ role: 'user', content: 'Hello' }],
         stepInputSnapshot: [{ role: 'user', content: 'Hello' }],
         stepAssistantText: 'Hi there!',
+        stepToolCalls: [],
+        stepToolCallIds: new Set<string>(),
         messageIds: new Set<string>(),
         ...overrides,
     }
@@ -165,6 +167,33 @@ describe('buildAiGeneration', () => {
         const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, privacyConfig)
         expect(result.properties.$ai_input).toBeNull()
         expect(result.properties.$ai_output_choices).toBeNull()
+    })
+
+    it('reports the tools called during the step, in call order', () => {
+        const trace = makeTrace({ stepToolCalls: ['read', 'edit', 'read'] })
+        const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
+        expect(result.properties.$ai_tools_called).toBe('read,edit,read')
+    })
+
+    it('reports no tools called when the step called none', () => {
+        const trace = makeTrace({ stepToolCalls: [] })
+        const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
+        expect(result.properties.$ai_tools_called).toBeNull()
+    })
+
+    it('still reports tool names in privacy mode', () => {
+        // Names carry no user content — $ai_span_name already sends them unredacted.
+        const trace = makeTrace({ stepToolCalls: ['bash'] })
+        const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, privacyConfig)
+        expect(result.properties.$ai_tools_called).toBe('bash')
+        expect(result.properties.$ai_output_choices).toBeNull()
+    })
+
+    it('copies the tool names so later steps cannot mutate a captured event', () => {
+        const trace = makeTrace({ stepToolCalls: ['read'] })
+        const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
+        trace.stepToolCalls.push('edit')
+        expect(result.properties.$ai_tools_called).toBe('read')
     })
 
     it('marks error generations', () => {

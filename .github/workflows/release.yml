@@ -1,56 +1,51 @@
 name: 'Release'
 
 on:
-    pull_request:
-        types: [closed]
+    push:
         branches: [main]
+        paths:
+            - '.changeset/*.md'
     workflow_dispatch:
 
 permissions:
     contents: read
 
 # Concurrency control: only one release process can run at a time
-# This prevents race conditions if multiple PRs with 'release' label merge simultaneously
+# This prevents race conditions if multiple releasable changesets merge simultaneously
 concurrency:
     group: release
     cancel-in-progress: false
 
 jobs:
-    check-release-label:
-        name: Check for release label
+    check-changesets:
+        name: Check for changesets
         runs-on: ubuntu-latest
-        # Run when PR with 'release' label is merged to main, or on manual dispatch
-        if: |
-            github.event_name == 'workflow_dispatch' ||
-            (github.event_name == 'pull_request' &&
-             github.event.pull_request.merged == true &&
-             contains(github.event.pull_request.labels.*.name, 'release'))
         outputs:
-            should-release: ${{ steps.check.outputs.should-release }}
+            has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
                   fetch-depth: 0
 
-            - name: Check release conditions
+            - name: Check for changesets
               id: check
               run: |
                   changeset_count=$(find .changeset -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l)
                   if [ "$changeset_count" -gt 0 ]; then
-                    echo "should-release=true" >> "$GITHUB_OUTPUT"
+                    echo "has-changesets=true" >> "$GITHUB_OUTPUT"
                     echo "Found $changeset_count changeset(s), ready to release"
                   else
-                    echo "should-release=false" >> "$GITHUB_OUTPUT"
+                    echo "has-changesets=false" >> "$GITHUB_OUTPUT"
                     echo "No changesets to release"
                   fi
 
     notify-approval-needed:
         name: Notify Slack - Approval Needed
-        needs: check-release-label
-        if: needs.check-release-label.outputs.should-release == 'true'
-        uses: posthog/.github/.github/workflows/notify-approval-needed.yml@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+        needs: check-changesets
+        if: needs.check-changesets.outputs.has-changesets == 'true'
+        uses: posthog/.github/.github/workflows/notify-approval-needed.yml@c220af5fc29f2818f91ac8e4906ca71a3da880ff # main
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -60,19 +55,22 @@ jobs:
 
     version-bump:
         name: Bump version and commit to main
-        needs: [check-release-label, notify-approval-needed]
+        needs: [check-changesets, notify-approval-needed]
         runs-on: ubuntu-latest
-        if: always() && needs.check-release-label.outputs.should-release == 'true'
+        if: always() && needs.check-changesets.outputs.has-changesets == 'true'
         environment: 'Release'
         permissions:
             contents: write
         outputs:
-            committed: ${{ steps.commit-version-bump.outputs.committed }}
+            # Whether the release commit actually landed, not merely that there was
+            # something to commit: publish and the "released" Slack notice are gated on
+            # this, so a failed commit step must not read as a successful release.
+            committed: ${{ steps.commit-version-bump.outputs.commit-hash != '' }}
             new-version: ${{ steps.apply-changesets.outputs.new-version }}
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true
-              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              uses: posthog/.github/.github/actions/slack-thread-reply@c220af5fc29f2818f91ac8e4906ca71a3da880ff # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -82,13 +80,13 @@ jobs:
 
             - name: Get GitHub App token
               id: releaser
-              uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
               with:
                   app-id: ${{ secrets.GH_APP_POSTHOG_OPENCODE_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_OPENCODE_RELEASER_PRIVATE_KEY }}
 
             - name: Checkout repository
-              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
                   fetch-depth: 0
@@ -118,21 +116,29 @@ jobs:
             - name: Update lockfile
               run: pnpm install --no-frozen-lockfile
 
-            - name: Commit version bump and lockfile
-              id: commit-version-bump
-              env:
-                  GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
-                  NEW_VERSION: ${{ steps.apply-changesets.outputs.new-version }}
+            - name: Check for a version bump to commit
+              id: check-changes
               run: |
-                  git add -A
-                  if git diff --staged --quiet; then
+                  if [ -z "$(git status --porcelain)" ]; then
                     echo "No changes to commit"
                     echo "committed=false" >> "$GITHUB_OUTPUT"
                   else
-                    git commit -m "chore: release ${NEW_VERSION} [version bump]"
-                    git push origin main
                     echo "committed=true" >> "$GITHUB_OUTPUT"
                   fi
+
+            # Commits through the GitHub API so it carries GitHub's signature, which
+            # the org-wide signed-commits ruleset requires. A plain `git push` is
+            # rejected.
+            - name: Commit version bump and lockfile
+              id: commit-version-bump
+              if: steps.check-changes.outputs.committed == 'true'
+              uses: planetscale/ghcommit-action@a6b150b81dca5dd027baa898604418eec9e11465 # v0.2.22
+              with:
+                  commit_message: 'chore: release ${{ steps.apply-changesets.outputs.new-version }} [version bump] [skip ci]'
+                  repo: ${{ github.repository }}
+                  branch: main
+              env:
+                  GITHUB_TOKEN: ${{ steps.releaser.outputs.token }}
 
     notify-rejected:
         name: Notify Slack - Rejected
@@ -166,7 +172,7 @@ jobs:
             - name: Notify Slack - Rejected
               if: steps.check-rejection.outputs.was_rejected == 'true'
               continue-on-error: true
-              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              uses: posthog/.github/.github/actions/slack-thread-reply@c220af5fc29f2818f91ac8e4906ca71a3da880ff # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -184,7 +190,7 @@ jobs:
             id-token: write
         steps:
             - name: Checkout repository
-              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
                   fetch-depth: 0
@@ -199,7 +205,7 @@ jobs:
 
             - name: Check package version
               id: check-package-version
-              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2
+              uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
 
             - name: Typecheck
               if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -260,7 +266,7 @@ jobs:
 
             - name: Send failure event to PostHog
               if: ${{ failure() }}
-              uses: PostHog/posthog-github-action@58dea254b598fb5d469c0699c98af8288a7f7650 # v1
+              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
               with:
                   posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
                   event: 'posthog-opencode-github-release-workflow-failure'
@@ -275,7 +281,7 @@ jobs:
             - name: Notify Slack - Failed
               continue-on-error: true
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              uses: posthog/.github/.github/actions/slack-thread-reply@c220af5fc29f2818f91ac8e4906ca71a3da880ff # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -291,7 +297,7 @@ jobs:
         steps:
             - name: Notify Slack - Released
               continue-on-error: true
-              uses: posthog/.github/.github/actions/slack-thread-reply@9fa8c2b2f32880c61dc5cdaebb3c4437a12f9038 # main
+              uses: posthog/.github/.github/actions/slack-thread-reply@c220af5fc29f2818f91ac8e4906ca71a3da880ff # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}

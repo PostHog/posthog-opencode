@@ -105,25 +105,31 @@ describe('trace state machine (real OpenCode event ordering)', () => {
         expect(captured.filter((e) => e.event === '$ai_trace')).toHaveLength(1)
     })
 
-    it("attributes each step's tool calls to that step's generation", async () => {
-        // Two steps: the first calls a tool, the second answers from its result.
-        // Tool parts arrive between step-start and step-finish, which is the same
-        // ordering the existing span parenting already relies on.
-        const tool = (name: string, id: string) => ({
+    it("attributes each step's tool calls in invocation order when parallel tools finish out of order", async () => {
+        // Two steps: the first calls parallel tools, the second answers from their results.
+        const tool = (name: string, id: string, status: 'running' | 'completed') => ({
             type: 'message.part.updated',
             properties: {
                 part: {
                     type: 'tool',
                     id,
+                    callID: id,
                     sessionID: S,
                     messageID: A,
                     tool: name,
-                    state: {
-                        status: 'completed',
-                        input: { path: 'a.txt' },
-                        output: 'file contents',
-                        time: { start: 0, end: 1000 },
-                    },
+                    state:
+                        status === 'running'
+                            ? {
+                                  status,
+                                  input: { path: 'a.txt' },
+                                  time: { start: 0 },
+                              }
+                            : {
+                                  status,
+                                  input: { path: 'a.txt' },
+                                  output: 'file contents',
+                                  time: { start: 0, end: 1000 },
+                              },
                 },
             },
         })
@@ -163,10 +169,12 @@ describe('trace state machine (real OpenCode event ordering)', () => {
                     },
                 },
             },
-            // step 1 — calls two tools
+            // step 1 — invokes read before edit, but edit completes first
             { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
-            tool('read', 'part-tool-1'),
-            tool('edit', 'part-tool-2'),
+            tool('read', 'part-tool-1', 'running'),
+            tool('edit', 'part-tool-2', 'running'),
+            tool('edit', 'part-tool-2', 'completed'),
+            tool('read', 'part-tool-1', 'completed'),
             stepFinish(),
             // step 2 — pure text answer, no tools
             { type: 'message.part.updated', properties: { part: { type: 'step-start', sessionID: S, messageID: A } } },
@@ -181,14 +189,14 @@ describe('trace state machine (real OpenCode event ordering)', () => {
         const generations = captured.filter((e) => e.event === '$ai_generation')
         expect(generations).toHaveLength(2)
 
-        // Step 1 reports both tools, in call order; step 2 reports none.
-        expect(generations[0].properties.$ai_tools_called).toEqual(['read', 'edit'])
+        // Step 1 reports both tools in invocation order, as a canonical string;
+        // step 2 reports none.
+        expect(generations[0].properties.$ai_tools_called).toBe('read,edit')
         expect(generations[1].properties.$ai_tools_called).toBeNull()
 
-        // The tool spans are parented to the same generation the names were
-        // attributed to, so both views of the step agree.
+        // Spans still arrive in completion order and are parented to the same generation.
         const spans = captured.filter((e) => e.event === '$ai_span')
-        expect(spans.map((s) => s.properties.$ai_span_name)).toEqual(['read', 'edit'])
+        expect(spans.map((s) => s.properties.$ai_span_name)).toEqual(['edit', 'read'])
         for (const span of spans) {
             expect(span.properties.$ai_parent_id).toBe(generations[0].properties.$ai_span_id)
         }

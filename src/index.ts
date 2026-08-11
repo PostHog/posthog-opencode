@@ -60,6 +60,7 @@ export const PostHogPlugin: Plugin = async () => {
                 stepInputMessages: [],
                 stepInputSnapshot: [],
                 stepToolCalls: [],
+                stepToolCallIds: new Set(),
                 messageIds: new Set(),
             }
             traces.set(sessionId, trace)
@@ -92,6 +93,7 @@ export const PostHogPlugin: Plugin = async () => {
                 stepInputMessages: [],
                 stepInputSnapshot: [],
                 stepToolCalls: [],
+                stepToolCallIds: new Set(),
                 messageIds: new Set([msg.id]),
             }
             traces.set(msg.sessionID, trace)
@@ -170,6 +172,7 @@ export const PostHogPlugin: Plugin = async () => {
         // Reset per-step tool calls; they are attributed to the generation
         // whose span ID was just allocated above.
         trace.stepToolCalls = []
+        trace.stepToolCallIds = new Set()
     }
 
     function handleStepFinish(part: StepFinishPart) {
@@ -191,18 +194,21 @@ export const PostHogPlugin: Plugin = async () => {
     }
 
     function handleToolPart(part: ToolPart) {
-        if (part.state.status !== 'completed' && part.state.status !== 'error') return
-
         const trace = traces.get(part.sessionID)
         if (!trace) return
+
+        // Record invocation order as tools start. Terminal updates can arrive in
+        // a different order for parallel calls, and each call emits multiple updates.
+        if (part.state.status !== 'pending' && !trace.stepToolCallIds.has(part.callID)) {
+            trace.stepToolCallIds.add(part.callID)
+            trace.stepToolCalls.push(part.tool)
+        }
+
+        if (part.state.status !== 'completed' && part.state.status !== 'error') return
 
         const toolState = part.state as ToolStateCompleted | ToolStateError
         const span = buildAiSpan(part.tool, toolState, trace, config)
         safeCapture(span)
-
-        // Also record the name on the step, so the generation can report which
-        // tools it called. The span above is parented to the same generation.
-        trace.stepToolCalls.push(part.tool)
 
         // Feed tool result into step input so subsequent generations include
         // the tool context the model actually saw. Redact and truncate to

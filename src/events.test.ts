@@ -59,6 +59,7 @@ function makeTrace(overrides?: Partial<TraceState>): TraceState {
         stepInputSnapshot: [{ role: 'user', content: 'Hello' }],
         stepAssistantText: 'Hi there!',
         stepToolCalls: [],
+        stepToolCallIds: new Set<string>(),
         messageIds: new Set<string>(),
         ...overrides,
     }
@@ -171,7 +172,7 @@ describe('buildAiGeneration', () => {
     it('reports the tools called during the step, in call order', () => {
         const trace = makeTrace({ stepToolCalls: ['read', 'edit', 'read'] })
         const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
-        expect(result.properties.$ai_tools_called).toEqual(['read', 'edit', 'read'])
+        expect(result.properties.$ai_tools_called).toBe('read,edit,read')
     })
 
     it('reports no tools called when the step called none', () => {
@@ -184,7 +185,7 @@ describe('buildAiGeneration', () => {
         // Names carry no user content — $ai_span_name already sends them unredacted.
         const trace = makeTrace({ stepToolCalls: ['bash'] })
         const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, privacyConfig)
-        expect(result.properties.$ai_tools_called).toEqual(['bash'])
+        expect(result.properties.$ai_tools_called).toBe('bash')
         expect(result.properties.$ai_output_choices).toBeNull()
     })
 
@@ -192,7 +193,7 @@ describe('buildAiGeneration', () => {
         const trace = makeTrace({ stepToolCalls: ['read'] })
         const result = buildAiGeneration(makeStepFinish(), makeAssistantInfo(), trace, defaultConfig)
         trace.stepToolCalls.push('edit')
-        expect(result.properties.$ai_tools_called).toEqual(['read'])
+        expect(result.properties.$ai_tools_called).toBe('read')
     })
 
     it('marks error generations', () => {

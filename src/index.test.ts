@@ -20,6 +20,7 @@ type AnyEvent = { type: string; properties: Record<string, unknown> }
 async function run(events: AnyEvent[]) {
     process.env.POSTHOG_API_KEY = 'phc_test'
     const hooks = (await PostHogPlugin({} as never)) as { event: (i: { event: AnyEvent }) => Promise<void> }
+    // oxlint-disable-next-line no-await-in-loop -- Event order is significant.
     for (const event of events) await hooks.event({ event })
 }
 

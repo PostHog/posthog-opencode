@@ -63,11 +63,11 @@
         "@opencode-ai/plugin": "*"
     },
     "devDependencies": {
-        "@changesets/cli": "^2.30.0",
+        "@changesets/cli": "^3.0.0",
         "@opencode-ai/plugin": "*",
         "@opencode-ai/sdk": "*",
         "@types/node": "^26.1.2",
-        "oxfmt": "^0.62.0",
+        "oxfmt": "^0.63.0",
         "oxlint": "^1.55.0",
         "typescript": "^7.0.2",
         "vitest": "^4.1.10"

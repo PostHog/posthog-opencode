@@ -60,12 +60,12 @@
         "posthog-node": "^5.0.0"
     },
     "peerDependencies": {
-        "@opencode-ai/plugin": "*"
+        "@opencode-ai/plugin": ">=1.0.69 <2.0.0"
     },
     "devDependencies": {
         "@changesets/cli": "^3.0.0",
-        "@opencode-ai/plugin": "*",
-        "@opencode-ai/sdk": "*",
+        "@opencode-ai/plugin": "1.0.69",
+        "@opencode-ai/sdk": "1.0.69",
         "@types/node": "^26.1.2",
         "oxfmt": "^0.64.0",
         "oxlint": "^1.55.0",

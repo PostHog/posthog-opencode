@@ -1,5 +1,11 @@
 # @posthog/opencode
 
+## 0.2.0
+
+### Minor Changes
+
+- 892f87f: Support OpenCode 1.0.69 and later, and pin development dependencies to the minimum supported version for compatibility testing.
+
 ## 0.1.1
 
 ### Patch Changes

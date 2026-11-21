@@ -43,7 +43,7 @@
         "registry": "https://registry.npmjs.org/"
     },
     "engines": {
-        "node": ">=22.0.0"
+        "node": ">=22.22.0"
     },
     "packageManager": "pnpm@10.23.0",
     "scripts": {
@@ -57,7 +57,7 @@
         "prepublishOnly": "pnpm run build"
     },
     "dependencies": {
-        "posthog-node": "^5.0.0"
+        "posthog-node": "^6.0.5"
     },
     "peerDependencies": {
         "@opencode-ai/plugin": ">=1.0.69 <2.0.0"

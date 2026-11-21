@@ -93,10 +93,10 @@ describe('event timestamps', () => {
 
             expect(bodies).toHaveLength(1)
             const payload = JSON.parse(bodies[0].toString()) as {
-                sent_at: string
+                created_at: string
                 batch: Array<{ event: string; timestamp: string }>
             }
-            expect(payload.sent_at).toBe('2024-07-01T19:34:56.789Z')
+            expect(payload.created_at).toBe('2024-07-01T19:34:56.789Z')
             expect(payload.batch).toHaveLength(1)
             expect(payload.batch[0]).toMatchObject({
                 event: '$ai_generation',

@@ -29,7 +29,8 @@ export const PostHogPlugin: Plugin = async () => {
 
     function safeCapture(event: CaptureEvent) {
         try {
-            client.capture({
+            // Every event here is $ai_generation, $ai_span or $ai_trace, which belong on the AI endpoint.
+            client.captureAi({
                 distinctId: event.distinctId,
                 event: event.event,
                 properties: event.properties,
@@ -293,12 +294,11 @@ export const PostHogPlugin: Plugin = async () => {
                 // never crash OpenCode
             }
         },
-        // Flush and shut down the PostHog client when OpenCode tears the plugin
-        // down. posthog-node's flush() resolves before the HTTP send actually
-        // completes, so a short-lived `opencode run` invocation would otherwise
-        // exit and drop its final events. shutdown() drains all pending events and
-        // awaits the network round-trip. OpenCode awaits this dispose hook during
-        // teardown (it is registered as a scope finalizer).
+        // Shut down the PostHog client when OpenCode tears the plugin down, so a
+        // short-lived `opencode run` invocation sends its final events before it
+        // exits. shutdown() drains all pending events and awaits the network
+        // round-trip. OpenCode awaits this dispose hook during teardown (it is
+        // registered as a scope finalizer).
         dispose: async () => {
             if (disposed) return
             disposed = true

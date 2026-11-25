@@ -5,8 +5,12 @@ const captured: Array<{ event: string; properties: Record<string, unknown> }> = 
 
 vi.mock('posthog-node', () => ({
     PostHog: class {
-        capture(e: { event: string; properties: Record<string, unknown> }) {
+        captureAi(e: { event: string; properties: Record<string, unknown> }) {
             captured.push(e)
+        }
+        // Every event the plugin sends is an $ai_* event, so none may go through the analytics capture.
+        capture(e: { event: string }) {
+            throw new Error(`${e.event} was sent with capture(), not captureAi()`)
         }
         async flush() {}
         async shutdown() {}

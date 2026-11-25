@@ -22,7 +22,7 @@ Place the plugin source in your project's `.opencode/plugins/` directory (or `~/
 ```json
 {
     "dependencies": {
-        "posthog-node": "^5.0.0"
+        "posthog-node": "^6.0.5"
     }
 }
 ```
